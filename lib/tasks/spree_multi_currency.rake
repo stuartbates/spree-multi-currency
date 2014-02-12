@@ -131,7 +131,30 @@ namespace :spree_multi_currency do
         end
       end
     end
+
+    desc 'Rates from Yahoo'
+    task :yahoo, [:currency, :load_currencies] => :environment do |t, args|
+      #Rake::Task['spree_multi_currency:currency:iso4217'].invoke if args.load_currencies
+      if args.currency
+        default_currency = Spree::Currency.where('char_code = :currency_code or num_code = :currency_code', currency_code: args.currency.upcase ).first
+      else
+        default_currency = Spree::Currency.get('978', eur_hash)
+      end
+      default_currency.basic!
+      # for spree 2.x require set config currency
+      Spree::Config.currency = default_currency.char_code
+      date = Time.now
+      puts "Loads currency data from Yahoo using #{default_currency}"
+      Spree::Currency.all.each do |currency|
+        unless currency == default_currency
+          url = "http://query.yahooapis.com/v1/public/yql?q=select%20*%20from%20yahoo.finance.xchange%20where%20pair%20in%20%28%22#{ currency.char_code }#{ default_currency.char_code }%22%29&format=json&env=store://datatables.org/alltableswithkeys&callback="
+          puts url
+          @data = JSON.load(open(url))
+          @value = BigDecimal(@data['query']['results']['rate']['Rate'])
+
+          Spree::CurrencyConverter.add(currency, date, @value, 1)
+        end
+      end
+    end
   end
-
 end
-
