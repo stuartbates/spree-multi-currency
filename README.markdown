@@ -1,7 +1,3 @@
-[![Coverage Status](https://coveralls.io/repos/pronix/spree-multi-currency/badge.png)](https://coveralls.io/r/pronix/spree-multi-currency)
-
-[![Build Status](https://travis-ci.org/pronix/spree-multi-currency.png)](https://travis-ci.org/pronix/spree-multi-currency)
-
 # Spree Multi-Currency
 
 Support different currency and recalculate price from one to another
@@ -10,7 +6,7 @@ Installation
 ---------
 Add to Gemfile
 
-    gem "spree_multi_currency", :git => "git://github.com/pronix/spree-multi-currency.git"
+    gem "spree_multi_currency", :github => "stuartbates/spree-multi-currency"
 
 Run
 ---
@@ -23,38 +19,26 @@ Load currencies:
 ---------------
 Load up the list of all international currencies with corresponding codes:
 
-    rake spree_multi_currency:currency:iso4217         # Load currency ISO4217 table from Wikipedia http://en.wikipedia.org/wiki/ISO_4217
-    rake spree_multi_currency:currency:okv             # Central Bank of Russian Federation
+	# Load currency ISO4217 table from Wikipedia http://en.wikipedia.org/wiki/ISO_4217
+    rake spree_multi_currency:currency:iso4217
 
 This step is not obligatory, i.e. you can manually fill up the 'currencies' table, but it's more practical to load the list with rake task above (and be sure the codes are OK), and then remove the currencies you don't want to support.
 
-Raketasks will set 'locale' automatically for the currencies USD, EUR, RUB. For other currencies you have to do this manually.
+Rake tasks will set 'locale' automatically for the currencies USD, EUR, RUB. For other currencies you have to do this manually.
 
 If you want get amount in base currency use base_total
 
 Load rates:
 ----------
-*Warning* Rates are being calculated relative to currency configured as 'basic'. It is therefore obligatory to visit Spree admin panel (or use Rails console) and edit one of the currencies to be the 'basic' one.
+**Warning** Rates are being calculated relative to currency configured as 'basic'. It is therefore obligatory to visit Spree admin panel (or use Rails console) and edit one of the currencies to be the 'basic' one.
 
 Basic currency is also the one considered to be stored as product prices, shipment rates etc., from which all the other ones will be calculated using the rates.
 
 After setting the basic currency, time to load the rates using one of the rake tasks below. There are three sources of conversion rates supported by this extension:
 
-1. Rates from Central Bank of Russian Federation http://www.cbr.ru. These assume Russian Ruble is your basic currency:
+1. Rates from Yahoo.
 
-        rake spree_multi_currency:rates:cbr
-
-2. Rates from European Central Bank. These assume Euro is your basic currency:
-
-        rake spree_multi_currency:rates:ecb
-
-3. Rates from Google.
-
-        rake spree_multi_currency:rates:google[currency]
-
-The argument in square brackets is the iso code of your basic currency, so to load rates when US Dollar is your basic currency, use
-
-        rake spree_multi_currency:rates:google[usd]
+        rake spree_multi_currency:rates:yahoo[gbp]
 
 There's also an optional square-bracket-enclosed parameter "load_currencies" for :rates tasks above, but it just loads up currencies table from Wikipedia, so is not needed at this point.
 
@@ -72,134 +56,43 @@ Changing Currency in store
 Self-explanatory:
 
     http://[domain]/currency/[isocode]
-    <%= link_to "eur", currency_path(:eur) %>
+    <%= link_to raw "&euro;", currency_path(:eur) %>
 
 
-Translation files
---------------------
-To have custom currency symbols and formatters, you need to have a corresponding entry in one of locale files, with main key like currency_XXX, where XXX is the 3-letter iso code of given currency.
+## Technical Overview
 
-If you won't have it, all the other currencies will be rendered using default formatters and symbols, which can (will) lead to confusion and inconsistency. It is recommended to create locale entries for all currencies you want to support at your store and delete all the other currencies.
+- We introduce 2 new models
+  - currency.rb
+  - currency_converter.rb
 
-Example for usd, eur
+The `Currency` model represents a single currency e.g. GBP, EUR, USD etc…  Each currency object HAS_MANY `CurrencyConverter`(s) each of which represent a conversion rate at a particular point in time for the currency it belongs to.
 
-    --
-    currency_USD: &usd
-      number:
-        currency:
-          format:
-            format: "%u%n"
-            unit: "$"
-            separator: "."
-            delimiter: ","
-            precision: 2
-            significant: false
-            strip_insignificant_zeros: false
+One currency must be defined as the basic currency - this is the currency from which all calculations are based on.  The currency model has an instance method called `basic!` which will set this currency as the basic currency.
 
-    currency_EUR:
-      <<: *usd
-      number:
-        currency:
-          format:
-            format: "%u%n"
-            unit: "€"
+The currency model has a series of class methods that deal with price conversion between different currencies.
 
+	def convert(value, from, to)
+	end
+	
+	def conversion_to_current(value, options = {})
+	end
+	
+	def conversion_from_current(value, options = {})
+	end
+	
+The `CurrencyConverter` model is a very thin model which simply stores the values to provide historic snapshots of conversion rates.
 
+There's also numerous model decorators that are provided to override price getters ensuring a converted price can be returned.  The `variant_decorator.rb` is a good example of this which overrides `price_in`.
 
+Price in normally just searches for an entry in the prices table - however the newly decorated version of the method searches and if not found creates a new entry in the prices table.
 
-= Multi Currency
+The `product_decorator.rb` basically just overrides the definition of available now… WHY?
 
-Support different currency and recalculate price from one to another
-===========================================
-Installation
----------
-Add to Gemfile
-    gem "spree_multi_currency", :git => "git://github.com/pronix/spree-multi-currency.git"
+The gem also adds a `multi_currency` mixin which makes use of meta-programming to allow any attribute that returns a price/amount to be returned in the current currency.
 
-Run
----
-    rake spree_multi_currency:install:migrations
-    rake db:migrate
-
-Load currencies:
----------------
-    rake spree_multi_currency:currency:iso4217         # Load currency ISO4217 http://en.wikipedia.org/wiki/ISO_4217
-    rake spree_multi_currency:currency:okv             # Общероссийский классификатор валют...
-
-Load rates:
-----------
-    rake spree_multi_currency:rates:cbr                               # Курс Сбербанка РФ http://www.cbr.ru
-    rake "spree_multi_currency:rates:ecb[load_currencies]"              # Rates from European Central Bank
-  for example     rake spree_multi_currency:rates:google[USD]
-    rake "spree_multi_currency:rates:google[currency,load_currencies]"  # Rates from Google
-
-
-Settings
----------
-        In admin block, configuration menu add two tables currency and currency conversion rate
-        In reference currency enters the list of currencies, indicate if one of the major currencies (in the currency keeps all prices). Each currency assign corresponding locale.
-        In Exchange Rates, provides information on the price of the currency on a specified date to the basic currency(from russian central bank).
-        In the exchange rates set date, currency, and face value of the currency in the base currency.
-        To fill in the exchange rate, you can use task for download exchange rates from the site of the Central Bank (http://www.cbr.ru):
-        rake spree_multi_currencies:rates:cbr, as in this problem, loading the list of currencies.
-
-        В справочнике Валюты заносим список валют, указываем одну из валют основной (в этой валюте хранятся все цены). Каждой валюте назначаем соответствующую локаль.
-        В справчнике Курсы валют, содержиться информация о цене валюты на определенную дату к основной валюте.
-        В курсе валют указываеться дата, валюта, номинал и стоимость валюты в основной валюте.
-        Для заполнения курса валют, можно воспользоватьбся задачей загрузки курса валют с сайта ЦБ(http://www.cbr.ru):
-        rake spree_multi_currencies:rates:cbr, так же в этой задаче идет загрузка списка валют.
-
-Смена валюты
--------------
- По умолчанию валюта выбирается от текущей локали сайта.
- Так же можно сменить локаль по адресу http://[domain]/currency/[isocode], <%= link_to "eur", currency_path(:eur) %>
-
- isocode: eur, usd, rub (цифровой код прописанные в справочнике валюты)
- После смены валюты через url перестает работать смена валюты на основание текущей локали.
-
-Формат вывода валюты
---------------------
-Формат для валюты прописан в локализации, для каждой валюты нужно описать свою локализацию (прописаны eur, usd, rub):
-Пример для usd, eur
-
-    --
-    currency_USD: &usd
-      number:
-        currency:
-          format:
-            format: "%u%n"
-            unit: "$"
-            separator: "."
-            delimiter: ","
-            precision: 2
-            significant: false
-            strip_insignificant_zeros: false
-
-    currency_EUR:
-      <<: *usd
-      number:
-        currency:
-          format:
-            format: "%u%n"
-            unit: "€"
-
-
-For tests
----------
-For start tests require exec:
-`bundle exec rake test_app && bundle exec rake spec`
-
-extention require store in ./spree
-in Rakefile defined
-
-    # require define path to spree project
-    ENV['SPREE_GEM_PATH'] = "/home/dima/project/spree"
-    # or define spree as gem in Gemfile
-    # and decomment this
-    # gemfile = Pathname.new("Gemfile").expand_path
-    # lockfile = gemfile.dirname.join('Gemfile.lock')
-    # definition = Bundler::Definition.build(gemfile, lockfile, nil)
-    # sc=definition.index.search "spree"
-    # ENV['SPREE_GEM_PATH'] = sc[0].loaded_from.gsub(/\/[a-z_]*.gemspec$/,'')
-
-
+	Spree::Adjustment.class_eval do
+	  extend Spree::MultiCurrency
+	  multi_currency :amount
+	end
+	
+This means you can call the `amount` method on the an adjustments instance and the returned value will be in the current currency - not the default currency.
