@@ -68,12 +68,14 @@ Spree::Order.class_eval do
     # update totals a second time in case updated adjustments
     # have an effect on the total
     update_totals
-    update_column('payment_state', payment_state)
-    update_column('shipment_state', shipment_state)
-    update_column('item_total', read_attribute(:item_total))
-    update_column('adjustment_total', adjustment_total)
-    update_column('payment_total', payment_total)
-    update_column('total', read_attribute(:total))
+
+    self.payment_state = payment_state
+    self.shipment_state = shipment_state
+    self.item_total = read_attribute(:item_total)
+    self.adjustment_total = adjustment_total
+    self.payment_total = payment_total
+    self.total = read_attribute(:total)
+    self.save
 
     # ensure checkout payment always matches order total
     # FIXME implement for partitial payments
@@ -82,5 +84,6 @@ Spree::Order.class_eval do
     end
 
     update_hooks.each { |hook| self.send hook }
+    #updater.update
   end
 end

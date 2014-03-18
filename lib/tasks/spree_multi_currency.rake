@@ -44,7 +44,7 @@ namespace :spree_multi_currency do
       else
         default_currency = Spree::Currency.get('978', eur_hash)
       end
-      default_currency.basic!
+      #default_currency.basic!
       # for spree 2.x require set config currency
       Spree::Config.currency = default_currency.char_code
       date = Time.now
